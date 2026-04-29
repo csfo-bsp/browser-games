@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Penalty Shootout</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: white;
+      gap: 14px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    #hud {
+      display: flex;
+      align-items: center;
+      gap: 40px;
+    }
+
+    .hud-block { text-align: center; }
+    .hud-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 4px; }
+    .hud-value { font-size: 1.4rem; font-weight: 700; letter-spacing: 3px; }
+    #score-num { color: #ffd700; }
+
+    /* ── Scene ── */
+    #scene {
+      position: relative;
+      width: 600px;
+      height: 480px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      background: linear-gradient(to bottom,
+        #3a8fc7 0%, #5aaee0 30%,
+        #5aaee0 34%, #3da55c 34%,
+        #2b8047 100%);
+    }
+
+    /* Pitch markings */
+    #arc {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 260px;
+      height: 90px;
+      border: 3px solid rgba(255,255,255,0.2);
+      border-bottom: none;
+      border-radius: 130px 130px 0 0;
+      pointer-events: none;
+    }
+
+    /* ── Goal ── */
+    #goal {
+      position: absolute;
+      top: 108px;
+      left: 130px; /* (600-340)/2 */
+      width: 340px;
+      height: 212px;
+      cursor: crosshair;
+    }
+
+    #net {
+      position: absolute;
+      top: 8px; left: 8px; right: 8px; bottom: 0;
+      background-image:
+        repeating-linear-gradient(0deg,  rgba(255,255,255,0.15) 0, rgba(255,255,255,0.15) 1px, transparent 1px, transparent 22px),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.15) 0, rgba(255,255,255,0.15) 1px, transparent 1px, transparent 22px);
+    }
+
+    /* depth shadow inside net */
+    #net::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 50%);
+    }
+
+    .post {
+      position: absolute;
+      background: #f2f2f2;
+      border-radius: 4px;
+      z-index: 2;
+    }
+    #left-post  { left: 0;  top: 0; width: 8px; height: 100%; border-radius: 4px 4px 0 0; }
+    #right-post { right: 0; top: 0; width: 8px; height: 100%; border-radius: 4px 4px 0 0; }
+    #crossbar   { left: 0;  top: 0; right: 0;   height: 8px; }
+
+    /* ── Goalie ── */
+    #goalie {
+      position: absolute;
+      width: 52px;
+      height: 72px;
+      left: 144px; /* center: (340-52)/2 */
+      top: 130px;  /* stands at bottom of goal */
+      z-index: 3;
+      transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                  top  0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* head */
+    #goalie-head {
+      position: absolute;
+      top: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 26px;
+      height: 26px;
+      background: #f5c08a;
+      border-radius: 50%;
+      border: 2px solid #d4935a;
+    }
+
+    #goalie-jersey {
+      width: 100%;
+      height: 44px;
+      background: #f7c948;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 900;
+      color: rgba(0,0,0,0.25);
+    }
+
+    #goalie-shorts {
+      width: 100%;
+      height: 28px;
+      background: #1e2a70;
+      border-radius: 0 0 6px 6px;
+    }
+
+    /* ── Ball ── */
+    #ball {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      background: radial-gradient(circle at 38% 35%, #fff 0%, #bbb 100%);
+      border-radius: 50%;
+      border: 1.5px solid #888;
+      left: 284px;
+      top: 416px;
+      z-index: 10;
+      pointer-events: none;
+      box-shadow: 2px 3px 6px rgba(0,0,0,0.35);
+      transition: left 0.42s ease-in, top 0.42s ease-in,
+                  width 0.38s ease-in, height 0.38s ease-in;
+    }
+
+    /* pentagon patch */
+    #ball::before {
+      content: '';
+      position: absolute;
+      top: 28%; left: 28%;
+      width: 44%; height: 44%;
+      background: rgba(0,0,0,0.14);
+      border-radius: 50%;
+    }
+
+    /* ── Reticle ── */
+    #reticle {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+      transform: translate(-50%, -50%);
+    }
+
+    .r-ring {
+      position: absolute;
+      inset: 5px;
+      border: 2px solid rgba(255, 55, 55, 0.9);
+      border-radius: 50%;
+    }
+
+    .r-h, .r-v {
+      position: absolute;
+      background: rgba(255, 55, 55, 0.9);
+    }
+    .r-h { width: 100%; height: 2px; top: 50%; left: 0; transform: translateY(-50%); }
+    .r-v { height: 100%; width: 2px; left: 50%; top: 0; transform: translateX(-50%); }
+
+    /* ── Feedback ── */
+    #feedback {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 3.8rem;
+      font-weight: 900;
+      letter-spacing: 6px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 30;
+      text-shadow: 0 3px 14px rgba(0,0,0,0.55);
+      transition: opacity 0.12s;
+      white-space: nowrap;
+    }
+    #feedback.show { opacity: 1; }
+    #feedback.goal-style { color: #3fff72; }
+    #feedback.save-style { color: #ff3e5e; }
+
+    /* ── Instruction ── */
+    #instruction {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.4);
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* ── End screen ── */
+    #end-screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 50;
+    }
+    #end-screen.show { display: flex; }
+    #end-title  { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 3px; color: #888; }
+    #final-score { font-size: 5.5rem; font-weight: 900; color: #ffd700; line-height: 1; }
+    #final-msg  { font-size: 1.15rem; color: #ddd; }
+    #restart-btn {
+      margin-top: 10px;
+      padding: 12px 38px;
+      background: #ffd700;
+      color: #111;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.12s;
+    }
+    #restart-btn:hover { background: #ffe44d; transform: scale(1.05); }
+
+    /* ── Shake ── */
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20% { transform: translateX(-7px); }
+      40% { transform: translateX(7px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+    #scene.shake { animation: shake 0.32s ease; }
+  </style>
+</head>
+<body>
+
+<h1>Penalty Shootout</h1>
+
+<div id="hud">
+  <div class="hud-block">
+    <div class="hud-label">Shots left</div>
+    <div class="hud-value" id="shots-dots"></div>
+  </div>
+  <div class="hud-block">
+    <div class="hud-label">Score</div>
+    <div class="hud-value" id="score-num"></div>
+  </div>
+</div>
+
+<div id="scene">
+  <div id="arc"></div>
+
+  <div id="goal">
+    <div id="net"></div>
+    <div id="left-post"  class="post"></div>
+    <div id="right-post" class="post"></div>
+    <div id="crossbar"   class="post"></div>
+    <div id="goalie">
+      <div id="goalie-head"></div>
+      <div id="goalie-jersey">1</div>
+      <div id="goalie-shorts"></div>
+    </div>
+  </div>
+
+  <div id="ball"></div>
+
+  <div id="reticle">
+    <div class="r-ring"></div>
+    <div class="r-h"></div>
+    <div class="r-v"></div>
+  </div>
+
+  <div id="feedback"></div>
+
+  <div id="end-screen">
+    <div id="end-title">Full Time</div>
+    <div id="final-score"></div>
+    <div id="final-msg"></div>
+    <button id="restart-btn">Play Again</button>
+  </div>
+
+  <div id="instruction">Click inside the goal to shoot</div>
+</div>
+
+<script>
+  const TOTAL_SHOTS = 5;
+  const SAVE_PROB   = 0.44; // goalie saves ~44% of shots
+
+  const ALL_ZONES = ['left-low','center-low','right-low','left-high','center-high','right-high'];
+
+  // Goalie positions within #goal div (340 x 212)
+  // Goalie: 52px wide, 72px tall body (head extends 22px above)
+  const GOALIE_HOME = { left: 144, top: 130 };
+  const GOALIE_POS  = {
+    'left-low':    { left: 14,  top: 130 },
+    'center-low':  { left: 144, top: 130 },
+    'right-low':   { left: 274, top: 130 },
+    'left-high':   { left: 14,  top: 18  },
+    'center-high': { left: 144, top: 18  },
+    'right-high':  { left: 274, top: 18  },
+  };
+
+  // Ball home position within #scene (600 x 480)
+  const BALL_HOME = { left: 284, top: 416, w: 32, h: 32 };
+
+  let state = { shotsLeft: TOTAL_SHOTS, goals: 0, busy: false };
+
+  const scene       = document.getElementById('scene');
+  const goal        = document.getElementById('goal');
+  const goalie      = document.getElementById('goalie');
+  const ball        = document.getElementById('ball');
+  const reticle     = document.getElementById('reticle');
+  const feedback    = document.getElementById('feedback');
+  const endScreen   = document.getElementById('end-screen');
+  const instruction = document.getElementById('instruction');
+
+  // -- Reticle tracking --
+  goal.addEventListener('mousemove', e => {
+    if (state.busy) return;
+    const sr = scene.getBoundingClientRect();
+    reticle.style.display = 'block';
+    reticle.style.left = (e.clientX - sr.left) + 'px';
+    reticle.style.top  = (e.clientY - sr.top)  + 'px';
+  });
+
+  goal.addEventListener('mouseleave', () => {
+    reticle.style.display = 'none';
+  });
+
+  // -- Shoot on click --
+  goal.addEventListener('click', e => {
+    if (state.busy || state.shotsLeft === 0) return;
+
+    const gr = goal.getBoundingClientRect();
+    const sr = scene.getBoundingClientRect();
+
+    const gx = e.clientX - gr.left;  // x within goal div
+    const gy = e.clientY - gr.top;   // y within goal div
+    const sx = e.clientX - sr.left;  // x within scene
+    const sy = e.clientY - sr.top;   // y within scene
+
+    // Divide goal into 6 zones (3 cols x 2 rows)
+    // Goal inner width: 340px minus 2 posts (8px each) = 324px
+    // Horizontal thirds: < 120 | 120-220 | > 220
+    const hZone = gx < 120 ? 'left' : gx < 220 ? 'center' : 'right';
+    const vZone = gy < 106 ? 'high'  : 'low';
+
+    shoot(`${hZone}-${vZone}`, sx, sy);
+  });
+
+  function shoot(targetZone, sx, sy) {
+    state.busy = true;
+    state.shotsLeft--;
+    reticle.style.display = 'none';
+    instruction.style.opacity = '0';
+    updateHUD();
+
+    // Fly ball toward click — shrinks as it recedes
+    ball.style.left   = (sx - 12) + 'px';
+    ball.style.top    = (sy - 12) + 'px';
+    ball.style.width  = '22px';
+    ball.style.height = '22px';
+
+    // Goalie decides after short reaction gap
+    setTimeout(() => {
+      const goalieZone = decide(targetZone);
+      moveGoalie(goalieZone);
+
+      // Judge after animations settle
+      setTimeout(() => {
+        const scored = goalieZone !== targetZone;
+        if (scored) state.goals++;
+        updateHUD();
+        showFeedback(scored);
+        if (!scored) shake();
+
+        // Brief pause then reset
+        setTimeout(() => {
+          hideFeedback();
+          resetPositions();
+
+          if (state.shotsLeft === 0) {
+            setTimeout(showEnd, 500);
+          } else {
+            setTimeout(() => { state.busy = false; }, 320);
+          }
+        }, 1000);
+
+      }, 380);
+    }, 190);
+  }
+
+  function decide(targetZone) {
+    if (Math.random() < SAVE_PROB) return targetZone; // correct dive
+    const others = ALL_ZONES.filter(z => z !== targetZone);
+    return others[Math.floor(Math.random() * others.length)];
+  }
+
+  function moveGoalie(zone) {
+    const p = GOALIE_POS[zone];
+    goalie.style.left = p.left + 'px';
+    goalie.style.top  = p.top  + 'px';
+  }
+
+  function showFeedback(isGoal) {
+    feedback.textContent = isGoal ? 'GOAL!' : 'SAVED!';
+    feedback.className   = 'show ' + (isGoal ? 'goal-style' : 'save-style');
+  }
+
+  function hideFeedback() { feedback.className = ''; }
+
+  function shake() {
+    scene.classList.add('shake');
+    setTimeout(() => scene.classList.remove('shake'), 320);
+  }
+
+  function resetPositions() {
+    ball.style.transition   = 'none';
+    goalie.style.transition = 'none';
+
+    ball.style.left   = BALL_HOME.left + 'px';
+    ball.style.top    = BALL_HOME.top  + 'px';
+    ball.style.width  = BALL_HOME.w    + 'px';
+    ball.style.height = BALL_HOME.h    + 'px';
+
+    goalie.style.left = GOALIE_HOME.left + 'px';
+    goalie.style.top  = GOALIE_HOME.top  + 'px';
+
+    // Re-enable transitions next frame
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      ball.style.transition   = 'left 0.42s ease-in, top 0.42s ease-in, width 0.38s ease-in, height 0.38s ease-in';
+      goalie.style.transition = 'left 0.28s cubic-bezier(0.4,0,0.2,1), top 0.28s cubic-bezier(0.4,0,0.2,1)';
+    }));
+  }
+
+  function updateHUD() {
+    const taken = TOTAL_SHOTS - state.shotsLeft;
+    document.getElementById('shots-dots').textContent =
+      Array.from({ length: TOTAL_SHOTS }, (_, i) => i < taken ? '○' : '●').join(' ');
+    document.getElementById('score-num').textContent =
+      `${state.goals} / ${taken}`;
+  }
+
+  function showEnd() {
+    const pct = state.goals / TOTAL_SHOTS;
+    document.getElementById('final-score').textContent = `${state.goals} / ${TOTAL_SHOTS}`;
+    document.getElementById('final-msg').textContent =
+      pct >= 0.8 ? 'Unstoppable!' :
+      pct >= 0.6 ? 'Great shooting!' :
+      pct >= 0.4 ? 'Not bad!'       : 'Keep practicing...';
+    endScreen.classList.add('show');
+  }
+
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    state = { shotsLeft: TOTAL_SHOTS, goals: 0, busy: false };
+    endScreen.classList.remove('show');
+    instruction.style.opacity = '1';
+    resetPositions();
+    updateHUD();
+  });
+
+  updateHUD();
+</script>
+</body>
+</html>
